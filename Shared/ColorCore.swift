@@ -25,8 +25,23 @@ struct LEDFrame: Equatable {
 }
 
 enum LinkMode: String, Codable, CaseIterable { case wifi, ble }
+enum OutputTarget: String, Codable, CaseIterable { case light, computer }
+
+enum ComputerColorPacket {
+    static func encode(sequence: UInt32, sampledNanoseconds: UInt64, rgb: RGB) -> Data {
+        Data("C1,\(sequence),\(sampledNanoseconds),\(rgb.r),\(rgb.g),\(rgb.b)\n".utf8)
+    }
+    static func nanoseconds(_ seconds: Double) -> UInt64 {
+        guard seconds.isFinite, seconds >= 0 else { return 0 }
+        let value = seconds * 1_000_000_000
+        return value >= Double(UInt64.max) ? UInt64.max : UInt64(value)
+    }
+}
 
 struct LEDSettings: Codable, Equatable {
+    var target: OutputTarget = .light
+    var pcHost = ""
+    var pcPort = 45678
     var mode: LinkMode = .wifi
     var host = "192.168.4.1"
     var port = 45679
@@ -38,14 +53,37 @@ struct LEDSettings: Codable, Equatable {
     var brightness = 96
     var fps = 60
     var area = 1
-    var isValid: Bool {
+    init() {}
+    enum CodingKeys: String, CodingKey {
+        case target, pcHost, pcPort, mode, host, port, peripheralID, peripheralName, u, v, brightness, fps, area
+    }
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        target = try c.decodeIfPresent(OutputTarget.self,forKey: .target) ?? .light
+        pcHost = try c.decodeIfPresent(String.self,forKey: .pcHost) ?? ""
+        pcPort = try c.decodeIfPresent(Int.self,forKey: .pcPort) ?? 45678
+        mode = try c.decodeIfPresent(LinkMode.self,forKey: .mode) ?? .wifi
+        host = try c.decodeIfPresent(String.self,forKey: .host) ?? "192.168.4.1"
+        port = try c.decodeIfPresent(Int.self,forKey: .port) ?? 45679
+        peripheralID = try c.decodeIfPresent(String.self,forKey: .peripheralID) ?? ""
+        peripheralName = try c.decodeIfPresent(String.self,forKey: .peripheralName) ?? ""
+        u = try c.decodeIfPresent(Double.self,forKey: .u) ?? 0.5
+        v = try c.decodeIfPresent(Double.self,forKey: .v) ?? 0.5
+        brightness = try c.decodeIfPresent(Int.self,forKey: .brightness) ?? 96
+        fps = try c.decodeIfPresent(Int.self,forKey: .fps) ?? 60
+        area = try c.decodeIfPresent(Int.self,forKey: .area) ?? 1
+    }
+    static func validIPv4(_ host: String) -> Bool {
         let parts = host.split(separator: ".", omittingEmptySubsequences: false)
         let octets = parts.compactMap { UInt8($0) }
-        let ipOK = parts.count == 4 && octets.count == 4 && octets[0] > 0 && octets[0] < 224
-        return ipOK && (1...65535).contains(port) && u.isFinite && v.isFinite &&
+        return parts.count == 4 && octets.count == 4 && octets[0] > 0 && octets[0] < 224
+    }
+    var isValid: Bool {
+        let destinationOK = target == .computer ? Self.validIPv4(pcHost) && (1...65535).contains(pcPort) :
+            Self.validIPv4(host) && (1...65535).contains(port) && (mode != .ble || UUID(uuidString: peripheralID) != nil)
+        return destinationOK && u.isFinite && v.isFinite &&
             (0...1).contains(u) && (0...1).contains(v) && (0...255).contains(brightness) &&
-            [30, 60, 120].contains(fps) && [1, 5].contains(area) &&
-            (mode != .ble || UUID(uuidString: peripheralID) != nil)
+            [30, 60, 120].contains(fps) && [1, 5].contains(area)
     }
 }
 

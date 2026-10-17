@@ -41,10 +41,13 @@ struct ContentView: View {
         .onChange(of: model.xPercent) { _ in model.saveQuietly() }
         .onChange(of: model.yPercent) { _ in model.saveQuietly() }
         .onChange(of: model.settings.mode) { _ in model.endManual(); model.saveQuietly() }
+        .onChange(of: model.settings.target) { _ in model.endManual(); model.saveQuietly() }
         .onChange(of: model.settings.area) { _ in model.saveQuietly() }
         .onChange(of: model.settings.fps) { _ in model.saveQuietly() }
         .onChange(of: model.hostText) { _ in model.saveQuietly() }
         .onChange(of: model.portText) { _ in model.saveQuietly() }
+        .onChange(of: model.pcHostText) { _ in model.saveQuietly() }
+        .onChange(of: model.pcPortText) { _ in model.saveQuietly() }
         .alert("提示", isPresented: Binding(get: { model.error != nil },set: { if !$0 { model.error = nil } })) {
             Button("知道了",role: .cancel) { model.error = nil }
         } message: { Text(model.error ?? "") }
@@ -82,7 +85,17 @@ struct ContentView: View {
     }
     private var connectionPanel: some View {
         VStack(alignment: .leading,spacing: 12) {
-            HStack { Text("连接").fontWeight(.semibold); Spacer() }
+            Picker("输出到",selection: $model.settings.target) {
+                Text("灯光").tag(OutputTarget.light); Text("电脑").tag(OutputTarget.computer)
+            }.pickerStyle(.segmented).disabled(model.isBroadcasting || model.preparing)
+            if model.settings.target == .computer {
+                HStack(spacing: 12) {
+                    TextField("电脑 IPv4 地址",text: $model.pcHostText)
+                        .keyboardType(.numbersAndPunctuation).textInputAutocapitalization(.never).disableAutocorrection(true)
+                    TextField("端口",text: $model.pcPortText).keyboardType(.numberPad).frame(width: 72)
+                }.font(.subheadline.monospaced()).padding(.vertical,5)
+                Text("电脑取色来源选“手机”，连接同一局域网").font(.caption2).foregroundColor(.secondary)
+            } else {
             Picker("连接方式", selection: $model.settings.mode) {
                 Text("Wi-Fi").tag(LinkMode.wifi); Text("蓝牙 BLE").tag(LinkMode.ble)
             }.pickerStyle(.segmented).disabled(model.isBroadcasting || model.preparing)
@@ -102,6 +115,7 @@ struct ContentView: View {
                     }
                 }
             }
+            }
         }.padding(16).background(Color.white).cornerRadius(18)
     }
     private var samplingPanel: some View {
@@ -112,8 +126,10 @@ struct ContentView: View {
             HStack(spacing: 14) {
                 coordinate("X %",text: $model.xPercent); coordinate("Y %",text: $model.yPercent)
             }
+            if model.settings.target == .light {
             HStack { Text("亮度").fontWeight(.semibold); Spacer(); Text("\(Int((Double(model.settings.brightness)/255*100).rounded()))%").foregroundColor(accent) }
             Slider(value: Binding(get: { Double(model.settings.brightness) },set: { model.settings.brightness = Int($0) }),in: 0...255,step: 1,onEditingChanged: { editing in if !editing { model.apply() } })
+            }
         }.padding(16).background(Color.white).cornerRadius(18)
     }
     private func coordinate(_ title: String,text: Binding<String>) -> some View {
@@ -126,7 +142,7 @@ struct ContentView: View {
             VStack(spacing: 16) {
                 Picker("采样范围",selection: $model.settings.area) { Text("单像素").tag(1); Text("5 × 5 平均色").tag(5) }.pickerStyle(.segmented)
                 Picker("采样上限",selection: $model.settings.fps) { Text("30 Hz").tag(30); Text("60 Hz").tag(60); Text("120 Hz").tag(120) }.pickerStyle(.segmented)
-                if model.settings.mode == .wifi {
+                if model.settings.target == .light && model.settings.mode == .wifi {
                     TextField("灯板 IPv4 地址",text: $model.hostText).keyboardType(.numbersAndPunctuation).textInputAutocapitalization(.never).disableAutocorrection(true)
                     TextField("UDP 端口",text: $model.portText).keyboardType(.numberPad)
                 }

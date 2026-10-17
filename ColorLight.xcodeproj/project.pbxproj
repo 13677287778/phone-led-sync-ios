@@ -102,6 +102,12 @@
 			);
 			"sourceTree" = "<group>";
 		};
+		"B46FD9522AEDE6E2966D9DFA" = {
+			"isa" = "PBXFileReference";
+			"lastKnownFileType" = "sourcecode.swift";
+			"path" = "Tests/ComputerSenderTests.swift";
+			"sourceTree" = "SOURCE_ROOT";
+		};
 		"3CEB3F914DE039D00F120361" = {
 			"isa" = "PBXFileReference";
 			"lastKnownFileType" = "sourcecode.swift";
@@ -118,6 +124,7 @@
 			"isa" = "PBXGroup";
 			"name" = "Tests";
 			"children" = (
+				"B46FD9522AEDE6E2966D9DFA",
 				"3CEB3F914DE039D00F120361",
 				"D6C99206DDEA5EBB03D6F518",
 			);
@@ -265,6 +272,14 @@
 			"isa" = "PBXBuildFile";
 			"fileRef" = "D138EF4D9E70A6724E88CE1F";
 		};
+		"69E080A72C4641FA2D5F2197" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "61B70DFB17E106AA056A000C";
+		};
+		"CE7C9145DE1EBF16061AA2EC" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "B46FD9522AEDE6E2966D9DFA";
+		};
 		"EA63B6BBB83995D9BA02892F" = {
 			"isa" = "PBXBuildFile";
 			"fileRef" = "D6C99206DDEA5EBB03D6F518";
@@ -275,6 +290,8 @@
 			"files" = (
 				"91EF1D0DA3EFDBABB1E078FC",
 				"EB99B8EFD99FD957B3382C8C",
+				"69E080A72C4641FA2D5F2197",
+				"CE7C9145DE1EBF16061AA2EC",
 				"EA63B6BBB83995D9BA02892F",
 			);
 			"runOnlyForDeploymentPostprocessing" = "0";

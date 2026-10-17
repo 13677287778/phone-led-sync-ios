@@ -27,7 +27,7 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>通过 Wi-Fi 直接连接灯板并发送颜色；不上传屏幕画面。</string>
+	<string>通过本地网络向你选择的灯板或电脑发送颜色；不上传屏幕画面。</string>
 	<key>UILaunchScreen</key>
 	<dict/>
 	<key>UISupportedInterfaceOrientations</key>

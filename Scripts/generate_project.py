@@ -51,7 +51,7 @@ def main():
     shared=[p for p in refs if p.startswith('Shared/')]
     appSources=sources('app',shared+[p for p in refs if p.startswith('App/')])
     extSources=sources('ext',shared+['Broadcast/SampleHandler.swift'])
-    testSources=sources('tests',['Shared/ColorCore.swift','Shared/PixelSampler.swift','Tests/PixelSamplerTests.swift'])
+    testSources=sources('tests',['Shared/ColorCore.swift','Shared/PixelSampler.swift','Shared/ColorSender.swift']+[p for p in refs if p.startswith('Tests/') and p!='Tests/main.swift'])
     assetBuild=obj('asset-build','PBXBuildFile',fileRef=assets)
     resources=obj('app-resources','PBXResourcesBuildPhase',buildActionMask=2147483647,files=[assetBuild],runOnlyForDeploymentPostprocessing=0)
     extResources=obj('ext-resources','PBXResourcesBuildPhase',buildActionMask=2147483647,files=[],runOnlyForDeploymentPostprocessing=0)
@@ -70,7 +70,7 @@ def main():
     path=ROOT/'ColorLight.xcodeproj';path.mkdir(exist_ok=True)
     (path/'project.pbxproj').write_text('// !$*UTF8*$!\n'+dump({'archiveVersion':1,'classes':{},'objectVersion':56,'objects':objects,'rootObject':project})+'\n',encoding='utf-8')
     commonInfo={'CFBundleDevelopmentRegion':'zh_CN','CFBundleExecutable':'$(EXECUTABLE_NAME)','CFBundleIdentifier':'$(PRODUCT_BUNDLE_IDENTIFIER)','CFBundleInfoDictionaryVersion':'6.0','CFBundleName':'$(PRODUCT_NAME)','CFBundleShortVersionString':'$(MARKETING_VERSION)','CFBundleVersion':'$(CURRENT_PROJECT_VERSION)','ColorLightAppGroup':'$(COLORLIGHT_APP_GROUP)','NSBluetoothAlwaysUsageDescription':'连接你选择的灯板，并发送本地取到的颜色。'}
-    plist('Config/App-Info.plist',{**commonInfo,'CFBundleDisplayName':'取色点灯','CFBundlePackageType':'APPL','LSRequiresIPhoneOS':True,'NSLocalNetworkUsageDescription':'通过 Wi-Fi 直接连接灯板并发送颜色；不上传屏幕画面。','UILaunchScreen':{},'UISupportedInterfaceOrientations':['UIInterfaceOrientationPortrait','UIInterfaceOrientationLandscapeLeft','UIInterfaceOrientationLandscapeRight'],'UISupportedInterfaceOrientations~ipad':['UIInterfaceOrientationPortrait','UIInterfaceOrientationPortraitUpsideDown','UIInterfaceOrientationLandscapeLeft','UIInterfaceOrientationLandscapeRight']})
+    plist('Config/App-Info.plist',{**commonInfo,'CFBundleDisplayName':'取色点灯','CFBundlePackageType':'APPL','LSRequiresIPhoneOS':True,'NSLocalNetworkUsageDescription':'通过本地网络向你选择的灯板或电脑发送颜色；不上传屏幕画面。','UILaunchScreen':{},'UISupportedInterfaceOrientations':['UIInterfaceOrientationPortrait','UIInterfaceOrientationLandscapeLeft','UIInterfaceOrientationLandscapeRight'],'UISupportedInterfaceOrientations~ipad':['UIInterfaceOrientationPortrait','UIInterfaceOrientationPortraitUpsideDown','UIInterfaceOrientationLandscapeLeft','UIInterfaceOrientationLandscapeRight']})
     plist('Config/Broadcast-Info.plist',{**commonInfo,'CFBundleDisplayName':'取色点灯','CFBundlePackageType':'XPC!','NSExtension':{'NSExtensionPointIdentifier':'com.apple.broadcast-services-upload','NSExtensionPrincipalClass':'$(PRODUCT_MODULE_NAME).SampleHandler','NSExtensionAttributes':{'RPBroadcastProcessMode':'RPBroadcastProcessModeSampleBuffer'}}})
     plist('Config/Shared.entitlements',{'com.apple.security.application-groups':['$(COLORLIGHT_APP_GROUP)']})
     scheme=ET.Element('Scheme',LastUpgradeVersion='1600',version='1.3')

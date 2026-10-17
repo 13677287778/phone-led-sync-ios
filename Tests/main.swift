@@ -92,4 +92,22 @@ check(slot.read()?.capturedAt == 9.99 && slot.read()?.samplingMS == 0.25,"timing
 let encodedTiming = try JSONEncoder().encode(timing)
 let decodedTiming = try JSONDecoder().decode(PipelineTiming.self,from: encodedTiming)
 check(decodedTiming.count == 120,"timing status JSON")
+let pcGolden = ComputerColorPacket.encode(sequence: 13,sampledNanoseconds: 8423492612000,rgb: RGB(r: 128,g: 64,b: 255))
+check(String(decoding: pcGolden,as: UTF8.self)=="C1,13,8423492612000,128,64,255\n","original PC C1 golden protocol")
+check(ComputerColorPacket.nanoseconds(1.25)==1_250_000_000,"PC monotonic timestamp units")
+check(ComputerColorPacket.nanoseconds(.nan)==0 && ComputerColorPacket.nanoseconds(-1)==0,"invalid timestamp safe conversion")
+check(ComputerColorPacket.nanoseconds(Double.greatestFiniteMagnitude)==UInt64.max,"timestamp overflow clamp")
+let oldJSON = Data(#"{"mode":"ble","peripheralID":"12345678-1234-1234-1234-123456789012","u":0.8276,"v":0.4342,"brightness":96}"#.utf8)
+var upgraded = try JSONDecoder().decode(LEDSettings.self,from: oldJSON)
+check(upgraded.target == .light && upgraded.isValid,"old settings migrate without losing BLE device")
+check(upgraded.u == 0.8276 && upgraded.v == 0.4342 && upgraded.pcPort == 45678,"preserve existing pick and initialize PC port")
+upgraded.target = .computer
+check(!upgraded.isValid,"PC needs its own address")
+upgraded.pcHost = "192.168.1.100";upgraded.peripheralID = ""
+check(upgraded.isValid,"PC does not require BLE hardware")
+upgraded.pcPort = 65536;check(!upgraded.isValid,"PC port bounds")
+upgraded.pcPort = 45678
+let newRoundTrip = try JSONDecoder().decode(LEDSettings.self,from: JSONEncoder().encode(upgraded))
+check(newRoundTrip == upgraded,"integrated target settings round trip")
+print("PC_GOLDEN " + String(decoding: pcGolden,as: UTF8.self).trimmingCharacters(in: .newlines))
 print("PASS \(checks) Swift core checks; screen-to-light latency not measured")

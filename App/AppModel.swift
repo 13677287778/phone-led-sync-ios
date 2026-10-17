@@ -9,6 +9,8 @@ import CoreBluetooth
     @Published var error: String?
     @Published var hostText = "192.168.4.1"
     @Published var portText = "45679"
+    @Published var pcHostText = ""
+    @Published var pcPortText = "45678"
     @Published var xPercent = "50"
     @Published var yPercent = "50"
     @Published var scanning = false
@@ -23,7 +25,10 @@ import CoreBluetooth
     private var scanTimeout: AnyCancellable?
     private var runningInForeground = true
     private var preparationStartedAt = 0.0
-    private var linkKey: String { "\(settings.mode.rawValue)|\(settings.host)|\(settings.port)|\(settings.peripheralID)" }
+    private var linkKey: String {
+        settings.target == .computer ? "computer|\(settings.pcHost)|\(settings.pcPort)" :
+            "\(settings.mode.rawValue)|\(settings.host)|\(settings.port)|\(settings.peripheralID)"
+    }
     var hasGroup: Bool { SharedStore.root != nil }
     var isBroadcasting: Bool { broadcast.isRunning }
     var currentColor: RGB { isBroadcasting ? broadcast.rgb : selectedColor }
@@ -35,18 +40,22 @@ import CoreBluetooth
     }
     func loadFields() {
         hostText = settings.host; portText = String(settings.port)
+        pcHostText = settings.pcHost; pcPortText = String(settings.pcPort)
         xPercent = String(format: "%.2f",settings.u*100); yPercent = String(format: "%.2f",settings.v*100)
     }
     @discardableResult func save(normalizeFields: Bool = true, reportError: Bool = true) -> Bool {
-        guard let port = Int(portText), let x = Double(xPercent), let y = Double(yPercent) else {
+        guard let x = Double(xPercent), let y = Double(yPercent),
+              let activePort = Int(settings.target == .computer ? pcPortText : portText) else {
             pickerReady = false
             if reportError { error = "请检查地址、端口和取色位置" }; return false
         }
-        var next = settings; next.host = hostText.trimmingCharacters(in: .whitespacesAndNewlines)
-        next.port = port; next.u = x/100; next.v = y/100
+        var next = settings; next.u = x/100; next.v = y/100
+        if next.target == .computer {
+            next.pcHost = pcHostText.trimmingCharacters(in: .whitespacesAndNewlines); next.pcPort = activePort
+        } else { next.host = hostText.trimmingCharacters(in: .whitespacesAndNewlines); next.port = activePort }
         guard next.isValid else {
             pickerReady = false
-            if reportError { error = next.mode == .ble && UUID(uuidString: next.peripheralID) == nil ? "请先扫描并选择灯板" : "请检查地址、端口及位置" }; return false
+            if reportError { error = next.target == .light && next.mode == .ble && UUID(uuidString: next.peripheralID) == nil ? "请先扫描并选择灯板" : "请检查地址、端口及位置" }; return false
         }
         do {
             try SharedStore.write(next, name: "settings.json"); settings = next
@@ -59,7 +68,7 @@ import CoreBluetooth
     private func refreshPickerReadiness() {
         pickerReady = settings.isValid && hasGroup && manualColor == nil && !scanning &&
             (UserDefaults.standard.string(forKey: "ColorLight.preparedLink") == linkKey ||
-             (settings.mode == .ble && CBCentralManager.authorization == .allowedAlways))
+             (settings.target == .light && settings.mode == .ble && CBCentralManager.authorization == .allowedAlways))
     }
     func selectPoint(u: Double, v: Double) {
         settings.u = SampleGeometry.clamp(u); settings.v = SampleGeometry.clamp(v)
@@ -73,7 +82,7 @@ import CoreBluetooth
     func scan() {
         guard !SharedStore.status().isRunning else { error = "请先停止同步再扫描蓝牙"; return }
         endManual(); scanning = true; pickerReady = false
-        var config = settings; config.mode = .ble
+        var config = settings; config.target = .light; config.mode = .ble
         sender.configure(config, scanOnly: true)
         scanTimeout = Just(0).delay(for: .seconds(12), scheduler: DispatchQueue.main).sink { [weak self] _ in
             self?.scanning = false; self?.sender.stop()
@@ -103,7 +112,7 @@ import CoreBluetooth
         preparationStartedAt = ProcessInfo.processInfo.systemUptime
         // Cause local-network/Bluetooth permission to be requested IN THE APP,
         // before its broadcast extension is in the background.
-        if settings.mode == .wifi { test(.black) }
+        if settings.target == .light && settings.mode == .wifi { test(.black) }
         else { sender.configure(settings) }
     }
     func releaseForBroadcastPicker() {
@@ -123,7 +132,7 @@ import CoreBluetooth
             poll()
             refreshPickerReadiness()
             if preparing && !isBroadcasting {
-                if settings.mode == .wifi { test(.black) }
+                if settings.target == .light && settings.mode == .wifi { test(.black) }
                 else { sender.configure(settings) }
             }
         }
@@ -136,7 +145,7 @@ import CoreBluetooth
         if broadcast.isRunning && manualColor != nil { endManual() }
         if preparing && senderState.ready { releaseForBroadcastPicker() }
         else if preparing && ProcessInfo.processInfo.systemUptime - preparationStartedAt > 12 {
-            preparing = false; endManual(); error = "未连接到灯板，请检查蓝牙或 Wi-Fi"
+            preparing = false; endManual(); error = settings.target == .computer ? "未连接到电脑，请检查地址及接收程序" : "未连接到灯板，请检查蓝牙或 Wi-Fi"
         }
     }
 }
