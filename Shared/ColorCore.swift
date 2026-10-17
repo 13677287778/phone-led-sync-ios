@@ -1,0 +1,96 @@
+import Foundation
+
+struct RGB: Codable, Equatable {
+    var r: UInt8
+    var g: UInt8
+    var b: UInt8
+    static let black = RGB(r: 0, g: 0, b: 0)
+    var hex: String { String(format: "#%02X%02X%02X", Int(r), Int(g), Int(b)) }
+}
+
+struct LEDFrame: Equatable {
+    var rgb: RGB
+    var brightness: UInt8
+    func encode(session: UInt32, sequence: UInt32) -> Data {
+        var bytes: [UInt8] = [0x43, 0x4c, 1, brightness]
+        for value in [session, sequence] {
+            for shift in stride(from: 0, to: 32, by: 8) {
+                bytes.append(UInt8(truncatingIfNeeded: value >> UInt32(shift)))
+            }
+        }
+        bytes += [rgb.r, rgb.g, rgb.b]
+        bytes.append(bytes.reduce(UInt8(0), ^))
+        return Data(bytes)
+    }
+}
+
+enum LinkMode: String, Codable, CaseIterable { case wifi, ble }
+
+struct LEDSettings: Codable, Equatable {
+    var mode: LinkMode = .wifi
+    var host = "192.168.4.1"
+    var port = 45679
+    var peripheralID = ""
+    var peripheralName = ""
+    // Relative to the visible (oriented) captured image, not UIKit points.
+    var u = 0.5
+    var v = 0.5
+    var brightness = 96
+    var fps = 60
+    var area = 1
+    var isValid: Bool {
+        let parts = host.split(separator: ".", omittingEmptySubsequences: false)
+        let octets = parts.compactMap { UInt8($0) }
+        let ipOK = parts.count == 4 && octets.count == 4 && octets[0] > 0 && octets[0] < 224
+        return ipOK && (1...65535).contains(port) && u.isFinite && v.isFinite &&
+            (0...1).contains(u) && (0...1).contains(v) && (0...255).contains(brightness) &&
+            [30, 60, 120].contains(fps) && [1, 5].contains(area) &&
+            (mode != .ble || UUID(uuidString: peripheralID) != nil)
+    }
+}
+
+enum SampleGeometry {
+    static func clamp(_ x: Double) -> Double { x.isFinite ? min(1, max(0, x)) : 0.5 }
+    // EXIF orientation: inverse transform from displayed image to raw buffer.
+    static func rawPoint(u: Double, v: Double, orientation: UInt32) -> (Double, Double) {
+        let x = clamp(u), y = clamp(v)
+        switch orientation {
+        case 2: return (1-x, y)
+        case 3: return (1-x, 1-y)
+        case 4: return (x, 1-y)
+        case 5: return (y, x)
+        case 6: return (y, 1-x)
+        case 7: return (1-y, 1-x)
+        case 8: return (1-y, x)
+        default: return (x, y)
+        }
+    }
+    static func pixel(u: Double, v: Double, width: Int, height: Int, orientation: UInt32) -> (Int, Int) {
+        let (x,y) = rawPoint(u: u, v: v, orientation: orientation)
+        return (min(max(0, width-1), Int((x * Double(max(0, width-1))).rounded())),
+                min(max(0, height-1), Int((y * Double(max(0, height-1))).rounded())))
+    }
+    static func orientedSize(width: Int, height: Int, orientation: UInt32) -> (Int, Int) {
+        (5...8).contains(orientation) ? (height,width) : (width,height)
+    }
+    static func yuv(y: UInt8, cb: UInt8, cr: UInt8, full: Bool, bt709: Bool) -> RGB {
+        let l = full ? Double(y) : (Double(y)-16) * 255/219
+        let d = (Double(cb)-128) * (full ? 1 : 255/224)
+        let e = (Double(cr)-128) * (full ? 1 : 255/224)
+        func byte(_ v: Double) -> UInt8 { UInt8(min(255,max(0,Int(v.rounded())))) }
+        if bt709 { return RGB(r: byte(l+1.5748*e),g: byte(l-0.187324*d-0.468124*e),b: byte(l+1.8556*d)) }
+        return RGB(r: byte(l+1.402*e),g: byte(l-0.344136*d-0.714136*e),b: byte(l+1.772*d))
+    }
+}
+
+/// One overwriteable slot; acquisition never enqueues a closure per captured frame.
+final class LatestColorMailbox {
+    struct Entry { let frame: LEDFrame; let timestamp: TimeInterval }
+    private let lock = NSLock()
+    private var entry: Entry?
+    func offer(_ frame: LEDFrame, now: TimeInterval = ProcessInfo.processInfo.systemUptime) {
+        lock.lock(); entry = Entry(frame: frame, timestamp: now); lock.unlock()
+    }
+    func read() -> Entry? { lock.lock(); defer { lock.unlock() }; return entry }
+    func clear() { lock.lock(); entry = nil; lock.unlock() }
+}

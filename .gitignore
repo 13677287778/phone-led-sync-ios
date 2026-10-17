@@ -1,0 +1,17 @@
+tools/
+cache/
+temp/
+work/
+output/
+build/
+__pycache__/
+.DS_Store
+xcuserdata/
+*.xcuserstate
+*.p12
+*.p8
+*.cer
+*.mobileprovision
+*.keychain*
+.env
+*.ipa

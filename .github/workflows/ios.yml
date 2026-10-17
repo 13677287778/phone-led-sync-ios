@@ -1,0 +1,40 @@
+name: iOS unsigned build
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'App/**'
+      - 'Broadcast/**'
+      - 'Shared/**'
+      - 'Config/**'
+      - 'Tests/**'
+      - 'Scripts/**'
+      - 'Assets.xcassets/**'
+      - '.github/workflows/ios.yml'
+permissions:
+  contents: read
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: macos-26
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check project and compile unsigned ARM64 app
+        run: bash Scripts/build_unsigned.sh
+      - name: Run simulator pixel tests
+        run: bash Scripts/test_simulator.sh
+      - name: Upload unsigned IPA and verification logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ColorLight-iOS-${{ github.run_number }}
+          path: |
+            output/*.ipa
+            output/*.json
+            output/*.txt
+            output/*.log
+          retention-days: 3
