@@ -61,7 +61,7 @@ struct ContentView: View {
                     .frame(width: 64,height: 64).overlay(Circle().stroke(Color.white.opacity(0.2),lineWidth: 1))
             }
             if model.isBroadcasting {
-                Button("停止同步",action: model.stopBroadcast).fontWeight(.semibold)
+                Button("停止同步",action: model.stopBroadcast).buttonStyle(.plain).font(.body.weight(.semibold))
                     .frame(maxWidth: .infinity).padding(.vertical,15).background(Color.red.opacity(0.8)).cornerRadius(12)
             } else if model.pickerReady && !model.preparing {
                 HStack {

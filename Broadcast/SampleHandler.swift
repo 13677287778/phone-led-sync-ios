@@ -41,13 +41,15 @@ final class SampleHandler: RPBroadcastSampleHandler {
             stateLock.lock(); status.message = "当前画面格式暂不支持"; stateLock.unlock(); return
         }
         let sampleMS = (ProcessInfo.processInfo.systemUptime - capturedAt) * 1000
-        sender.offer(rgb, brightness: c.brightness, capturedAt: capturedAt, samplingMS: sampleMS)
         let (w,h) = SampleGeometry.orientedSize(width: CVPixelBufferGetWidth(buffer), height: CVPixelBufferGetHeight(buffer), orientation: orientation)
-        stateLock.lock(); status.rgb = rgb; status.imageWidth = w; status.imageHeight = h
+        stateLock.lock()
+        guard !status.paused, !ending else { stateLock.unlock(); return }
+        sender.offer(rgb, brightness: c.brightness, capturedAt: capturedAt, samplingMS: sampleMS)
+        status.rgb = rgb; status.imageWidth = w; status.imageHeight = h
         status.sampledFrames &+= 1; status.lastVideoAt = Date().timeIntervalSince1970; stateLock.unlock()
     }
     override func broadcastPaused() {
-        stateLock.lock(); status.paused = true; stateLock.unlock(); sender.clear()
+        stateLock.lock(); status.paused = true; sender.clear(); stateLock.unlock()
     }
     override func broadcastResumed() {
         stateLock.lock(); status.paused = false; pacer.reset(); stateLock.unlock()
@@ -61,13 +63,14 @@ final class SampleHandler: RPBroadcastSampleHandler {
         let loaded = SharedStore.settings()
         if loaded.isValid {
             stateLock.lock(); let changed = config != loaded; config = loaded
-            let lastColor = status.rgb, hasFrame = status.sampledFrames > 0, paused = status.paused
             stateLock.unlock()
             if changed {
                 sender.clear(); sender.configure(loaded, keepStaticColor: true)
                 // Brightness/transport edits must also take effect on an idle,
                 // unchanged screen without waiting for ReplayKit to emit again.
-                if hasFrame && !paused { sender.offer(lastColor, brightness: loaded.brightness) }
+                stateLock.lock()
+                if status.sampledFrames > 0 && !status.paused && !ending { sender.offer(status.rgb, brightness: loaded.brightness) }
+                stateLock.unlock()
             }
         }
         let sent = sender.snapshot

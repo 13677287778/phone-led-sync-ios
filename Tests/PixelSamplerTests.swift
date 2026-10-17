@@ -38,4 +38,26 @@ final class PixelSamplerTests: XCTestCase {
         let bytes = LEDFrame(rgb: RGB(r: 255,g: 128,b: 7),brightness: 96).encode(session: 0x12345678,sequence: 0x01020304)
         XCTAssertEqual(bytes.map { String(format: "%02x",$0) }.joined(),"434c01607856341204030201ff80071a")
     }
+    func testCoalescedWakeupReadsOnlyLatestColor() {
+        let queue = DispatchQueue(label: "test.latest-event")
+        let mailbox = LatestColorMailbox(), received = LatestColorMailbox()
+        let done = DispatchSemaphore(value: 0)
+        queue.suspend()
+        let source = DispatchSource.makeUserDataAddSource(queue: queue)
+        source.setEventHandler {
+            if let value = mailbox.read() { received.offer(value.frame, now: value.timestamp) }
+            done.signal()
+        }
+        source.resume()
+        for i in 0..<10000 {
+            mailbox.offer(LEDFrame(rgb: RGB(r: UInt8(i%256),g: 0,b: 0),brightness: 96),now: Double(i))
+            source.add(data: 1)
+        }
+        queue.resume()
+        let result = done.wait(timeout: .now()+5)
+        source.cancel()
+        XCTAssertEqual(result,.success)
+        XCTAssertEqual(received.read()?.timestamp,9999)
+        XCTAssertEqual(received.read()?.frame.rgb.r,UInt8(9999%256))
+    }
 }
