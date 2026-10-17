@@ -28,7 +28,7 @@ enum SharedStore {
     }
     static func write<T: Encodable>(_ value: T, name: String) throws {
         guard let root = root else {
-            throw NSError(domain: "ColorLight", code: 1, userInfo: [NSLocalizedDescriptionKey: "共享配置不可用：请检查主 App 和广播扩展的 App Groups 签名权限"])
+            throw NSError(domain: "ColorLight", code: 1, userInfo: [NSLocalizedDescriptionKey: "共享配置不可用。当前组：\(groupID)。请核对主 App 和广播扩展实际签名及描述文件是否共同授权此组。"])
         }
         let data = try JSONEncoder().encode(value)
         try data.write(to: root.appendingPathComponent(name), options: [.atomic])

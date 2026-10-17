@@ -130,6 +130,7 @@ struct ContentView: View {
                 Text(model.isBroadcasting ? "\(model.broadcast.imageWidth) × \(model.broadcast.imageHeight) · 采样 \(model.broadcast.sampledFrames) · 提交 \(model.broadcast.submitted)\n\(model.broadcast.message)" : model.senderState.message)
                     .font(.caption).foregroundColor(.secondary).frame(maxWidth: .infinity,alignment: .leading)
                 Button("保存设置",action: model.apply)
+                Text("共享组：\(SharedStore.groupID)").font(.caption2).foregroundColor(.secondary).frame(maxWidth: .infinity,alignment: .leading)
                 Text("提交不代表灯端回执。受保护画面可能取到黑色。").font(.caption2).foregroundColor(.secondary)
             }.padding(.top,14)
         }.font(.subheadline).padding(16).background(Color.white).cornerRadius(18)

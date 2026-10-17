@@ -1,6 +1,12 @@
 name: iOS unsigned build
 on:
   workflow_dispatch:
+    inputs:
+      app_group:
+        description: 'App Group already authorized for BOTH app and extension; no certificates or passwords'
+        required: false
+        default: ''
+        type: string
   push:
     branches: [main]
     paths:
@@ -19,6 +25,8 @@ concurrency:
   cancel-in-progress: true
 jobs:
   build:
+    env:
+      COLORLIGHT_APP_GROUP: ${{ inputs.app_group || '' }}
     runs-on: macos-26
     timeout-minutes: 40
     steps:

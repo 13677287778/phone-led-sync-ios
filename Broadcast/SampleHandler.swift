@@ -16,7 +16,7 @@ final class SampleHandler: RPBroadcastSampleHandler {
     private var ending = false
 
     override func broadcastStarted(withSetupInfo setupInfo: [String: NSObject]?) {
-        guard SharedStore.root != nil else { fail("共享容器不可用，请核对两个目标的 App Groups 签名"); return }
+        guard SharedStore.root != nil else { fail("共享容器不可用：\(SharedStore.groupID)。请核对两个目标的 App Groups 签名"); return }
         let loaded = SharedStore.settings()
         guard loaded.isValid else { fail("请先在取色点灯 App 中保存有效设置"); return }
         stateLock.lock(); config = loaded; beganAt = Date().timeIntervalSince1970

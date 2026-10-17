@@ -1,6 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
+source Scripts/app_group_override.sh
 mkdir -p output
 xcrun simctl list devices available --json > output/simulator-devices.json
 device=$(python3 - <<'PY'
@@ -15,6 +16,7 @@ PY
 xcodebuild -project ColorLight.xcodeproj -scheme ColorLight -configuration Debug \
   -destination "platform=iOS Simulator,id=$device" -derivedDataPath build/SimulatorData \
   -resultBundlePath output/PixelTests.xcresult CODE_SIGNING_ALLOWED=NO \
+  "${app_group_build_args[@]}" \
   test > output/xcode-simulator-tests.log 2>&1 || { tail -120 output/xcode-simulator-tests.log; exit 1; }
 echo 'Simulator CoreVideo pixel/channel/orientation/protocol tests passed; this is NOT ReplayKit real-device verification.'
 app=build/SimulatorData/Build/Products/Debug-iphonesimulator/ColorLight.app

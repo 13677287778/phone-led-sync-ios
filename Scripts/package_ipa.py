@@ -2,6 +2,7 @@
 from pathlib import Path
 import hashlib
 import json
+import os
 import plistlib
 import sys
 import zipfile
@@ -16,6 +17,9 @@ def main():
     assert extension['CFBundleIdentifier']==info['CFBundleIdentifier']+'.Broadcast'
     assert info['ColorLightAppGroup']==extension['ColorLightAppGroup']
     assert '$(' not in info['ColorLightAppGroup']
+    requested_group=os.environ.get('COLORLIGHT_APP_GROUP')
+    if requested_group:
+        assert info['ColorLightAppGroup']==requested_group,'App Group build override did not reach both targets'
     binaries=[app/info['CFBundleExecutable'],ext/extension['CFBundleExecutable']]
     for p in binaries:assert p.stat().st_size>4096
     out.parent.mkdir(parents=True,exist_ok=True)
@@ -33,7 +37,8 @@ def main():
         f"主App：{info['CFBundleIdentifier']}\n广播扩展：{extension['CFBundleIdentifier']}\n共享组：{info['ColorLightAppGroup']}\n"
         '先签内嵌.appex，再签外层.app；两个目标使用同一团队及相同App Group，嵌入各自描述文件。\n'
         'app-group.entitlements.plist只是本项目所需的共享组权限，不是完整签名权限模板，不能代替描述文件。\n'
-        '若最终包名或共享组要修改，请修改Config/Build.xcconfig并重新编译，不要只重命名外层包。\n'
+        '若最终包名要修改，请修改Config/Build.xcconfig并重新编译，不要只重命名外层包。\n'
+        '共享组可由 Actions 手动构建的 app_group 参数统一指定，或修改 Config/Build.xcconfig；两边需一致。\n'
         '签名工具去掉共享组权限时，App可能能打开但无法取色同步。\n'
         '编译和模拟器像素测试不等于iPhone屏幕广播、BLE或光学延迟已经实测。\n',encoding='utf-8')
     print(json.dumps(report,indent=2))

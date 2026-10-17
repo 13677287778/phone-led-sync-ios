@@ -30,7 +30,7 @@ bash Scripts/test_simulator.sh
 
 GitHub Actions 使用标准 `macos-26`、只读仓库权限、并发取消旧任务和 40 分钟上限。公开仓库标准机器的运行时间按 GitHub 规则免费；产物只保留3天，不启用大型付费机器。
 
-成功后下载 `ColorLight-iOS-*` 产物中的 `ColorLight-1.0.0-unsigned.ipa`。它是 **arm64 真机包，不是模拟器 App**，尚未签名，不能直接在正常 iPhone 上运行。
+成功后下载 `ColorLight-iOS-*` 产物中的 `ColorLight-1.0.1-unsigned.ipa`。它是 **arm64 真机包，不是模拟器 App**，尚未签名，不能直接在正常 iPhone 上运行。
 
 ## 签名必须匹配
 
@@ -39,6 +39,8 @@ GitHub Actions 使用标准 `macos-26`、只读仓库权限、并发取消旧任
 - 主 App：`com.colorlight.ledsync`
 - 广播扩展：`com.colorlight.ledsync.Broadcast`
 - App Group：`group.com.colorlight.ledsync`
+
+手动运行 Actions 时，可通过 `app_group` 参数填写实际描述文件共同授权的组；该参数同时进入主 App、广播扩展的 Info.plist 和签名权限模板。打包器会核对最终两边值，防止只改一处。默认不填仍使用上述配置。此参数仅选择已有授权组，不会新增苹果授权；不要填写证书或密码。主界面高级设置可查看本次包实际使用的共享组。
 
 如果你的账号不能使用这些标识符，在 `Config/Build.xcconfig` 同时更改 Bundle Base 与已注册的 App Group，再重新编译。**先定最终标识符再签名，不要只改外层包名**。
 
