@@ -160,6 +160,9 @@ final class ColorSender: NSObject, CBCentralManagerDelegate, CBPeripheralDelegat
     }
     func centralManagerDidUpdateState(_ manager: CBCentralManager) {
         guard enabled, settings.mode == .ble else { return }
+        if manager.state != .poweredOn {
+            peripheral?.delegate = nil; peripheral = nil; characteristic = nil; ready = false
+        }
         ensureBLE()
     }
     private func ensureBLE() {

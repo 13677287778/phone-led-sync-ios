@@ -1,6 +1,6 @@
 from pathlib import Path
 import json,struct,zlib,math
-r=Path(r'E:\USB\phone-led-sync-ios');d=r/'Assets.xcassets';d.mkdir(exist_ok=True)
+r=Path(__file__).resolve().parents[1];d=r/'Assets.xcassets';d.mkdir(exist_ok=True)
 (d/'Contents.json').write_text(json.dumps({'info':{'version':1,'author':'xcode'}}),encoding='utf-8')
 a=d/'AppIcon.appiconset';a.mkdir(exist_ok=True)
 images=[]

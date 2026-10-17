@@ -1,6 +1,6 @@
 from pathlib import Path
 import tree_sitter,tree_sitter_swift
-root=Path(r'E:\USB\phone-led-sync-ios')
+root=Path(__file__).resolve().parents[1]
 parser=tree_sitter.Parser(tree_sitter.Language(tree_sitter_swift.language()))
 errors=[]
 for p in root.rglob('*.swift'):

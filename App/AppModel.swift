@@ -103,7 +103,13 @@ import CoreBluetooth
     func foreground(_ active: Bool) {
         runningInForeground = active
         if !active { endManual() }
-        else { poll() }
+        else {
+            poll()
+            if preparing && !isBroadcasting {
+                if settings.mode == .wifi { test(.black) }
+                else { sender.configure(settings) }
+            }
+        }
     }
     func endManual() {
         manualTimer = nil; manualColor = nil; scanTimeout = nil; scanning = false; sender.stop()

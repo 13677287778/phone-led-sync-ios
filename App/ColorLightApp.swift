@@ -6,6 +6,7 @@ import SwiftUI
     var body: some Scene {
         WindowGroup {
             ContentView(model: model)
+                .preferredColorScheme(.light)
                 .onChange(of: scenePhase) { phase in
                     if phase == .active { model.foreground(true) }
                     else if phase == .background { model.foreground(false) }
