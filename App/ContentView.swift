@@ -5,12 +5,10 @@ struct ContentView: View {
     @State private var advanced = false
     @State private var showPhotos = false
     @State private var showPoint = false
-    @State private var showStart = false
     @State private var pointU = 0.5
     @State private var pointV = 0.5
     private let accent = Color(red: 0, green: 0.5, blue: 0.46)
     private let ink = Color(red: 0.08, green: 0.18, blue: 0.21)
-    @Environment(\.horizontalSizeClass) private var sizeClass
 
     var body: some View {
         ScrollView {
@@ -40,7 +38,13 @@ struct ContentView: View {
             }
         }
         .sheet(isPresented: $showPoint) { pointSheet }
-        .sheet(isPresented: $showStart, onDismiss: { model.preparing = false; model.endManual() }) { startSheet }
+        .onChange(of: model.xPercent) { _ in model.saveQuietly() }
+        .onChange(of: model.yPercent) { _ in model.saveQuietly() }
+        .onChange(of: model.settings.mode) { _ in model.endManual(); model.saveQuietly() }
+        .onChange(of: model.settings.area) { _ in model.saveQuietly() }
+        .onChange(of: model.settings.fps) { _ in model.saveQuietly() }
+        .onChange(of: model.hostText) { _ in model.saveQuietly() }
+        .onChange(of: model.portText) { _ in model.saveQuietly() }
         .alert("提示", isPresented: Binding(get: { model.error != nil },set: { if !$0 { model.error = nil } })) {
             Button("知道了",role: .cancel) { model.error = nil }
         } message: { Text(model.error ?? "") }
@@ -51,30 +55,37 @@ struct ContentView: View {
                 VStack(alignment: .leading,spacing: 9) {
                     Text("当前颜色").font(.caption).foregroundColor(.white.opacity(0.6))
                     Text(model.currentColor.hex).font(.system(size: 32,weight: .semibold,design: .monospaced)).minimumScaleFactor(0.6)
-                    Text("R \(model.currentColor.r)   G \(model.currentColor.g)   B \(model.currentColor.b)")
-                        .font(.caption.monospaced()).foregroundColor(.white.opacity(0.65))
                 }
                 Spacer(minLength: 8)
                 Circle().fill(Color(red: Double(model.currentColor.r)/255,green: Double(model.currentColor.g)/255,blue: Double(model.currentColor.b)/255))
                     .frame(width: 64,height: 64).overlay(Circle().stroke(Color.white.opacity(0.2),lineWidth: 1))
             }
-            Text(model.isBroadcasting ? model.broadcast.message : "固定位置 · 本地取色")
-                .font(.caption).foregroundColor(.white.opacity(0.65)).lineLimit(2)
-            Button {
-                if model.isBroadcasting { model.stopBroadcast() }
-                else { model.prepareBroadcast(); if model.error == nil { showStart = true } }
-            } label: {
-                Text(model.isBroadcasting ? "停止同步" : "开始同步").fontWeight(.semibold).frame(maxWidth: .infinity).padding(.vertical,14)
-            }.buttonStyle(.plain).background(model.isBroadcasting ? Color.red.opacity(0.8) : accent).cornerRadius(12)
+            if model.isBroadcasting {
+                Button("停止同步",action: model.stopBroadcast).fontWeight(.semibold)
+                    .frame(maxWidth: .infinity).padding(.vertical,15).background(Color.red.opacity(0.8)).cornerRadius(12)
+            } else if model.pickerReady && !model.preparing {
+                HStack {
+                    Text("开始同步").fontWeight(.semibold)
+                    Spacer()
+                    SystemBroadcastButton().frame(width: 52,height: 52)
+                }.padding(.leading,18).padding(.trailing,6).background(accent).cornerRadius(12)
+            } else {
+                Button(action: model.prepareBroadcast) {
+                    HStack {
+                        if model.preparing { ProgressView().tint(.white) }
+                        Text(model.preparing ? "连接中…" : "开始同步").fontWeight(.semibold)
+                    }.frame(maxWidth: .infinity).padding(.vertical,15)
+                }.buttonStyle(.plain).background(accent).cornerRadius(12).disabled(model.preparing)
+            }
         }
         .padding(20).foregroundColor(.white).background(ink).cornerRadius(20)
     }
     private var connectionPanel: some View {
         VStack(alignment: .leading,spacing: 12) {
-            HStack { Text("连接").fontWeight(.semibold); Spacer(); Text(model.isBroadcasting ? "扩展直连" : model.senderState.ready ? "可发送" : "待连接").font(.caption).foregroundColor(.secondary) }
+            HStack { Text("连接").fontWeight(.semibold); Spacer() }
             Picker("连接方式", selection: $model.settings.mode) {
                 Text("Wi-Fi").tag(LinkMode.wifi); Text("蓝牙 BLE").tag(LinkMode.ble)
-            }.pickerStyle(.segmented)
+            }.pickerStyle(.segmented).disabled(model.isBroadcasting || model.preparing)
             if model.settings.mode == .wifi {
                 HStack { Text("\(model.hostText) · \(model.portText)").font(.caption.monospaced()); Spacer()
                     Button("连接说明") { model.error = "连接 Wi-Fi 123456，密码 12345678，并保持连接。首次请点灯光测试并允许本地网络访问。" }.font(.caption)
@@ -83,7 +94,7 @@ struct ContentView: View {
                 HStack { Text(model.settings.peripheralName.isEmpty ? "未选择灯板" : model.settings.peripheralName).font(.caption); Spacer()
                     Button(model.scanning ? "扫描中…" : "扫描",action: model.scan).font(.caption).disabled(model.scanning || model.isBroadcasting)
                 }
-                if model.scanning || !model.senderState.devices.isEmpty {
+                if model.scanning || (model.settings.peripheralID.isEmpty && !model.senderState.devices.isEmpty) {
                     ForEach(model.senderState.devices) { choice in
                         Button { model.choose(choice) } label: {
                             HStack { Text(choice.name); Spacer(); Text("\(choice.rssi) dBm").foregroundColor(.secondary) }.font(.caption)
@@ -103,8 +114,6 @@ struct ContentView: View {
             }
             HStack { Text("亮度").fontWeight(.semibold); Spacer(); Text("\(Int((Double(model.settings.brightness)/255*100).rounded()))%").foregroundColor(accent) }
             Slider(value: Binding(get: { Double(model.settings.brightness) },set: { model.settings.brightness = Int($0) }),in: 0...255,step: 1,onEditingChanged: { editing in if !editing { model.apply() } })
-            Button("应用更改",action: model.apply).font(.subheadline.weight(.medium)).frame(maxWidth: .infinity).padding(11)
-                .background(accent.opacity(0.08)).cornerRadius(10)
         }.padding(16).background(Color.white).cornerRadius(18)
     }
     private func coordinate(_ title: String,text: Binding<String>) -> some View {
@@ -129,11 +138,21 @@ struct ContentView: View {
                 }.disabled(model.isBroadcasting)
                 Text(model.isBroadcasting ? "\(model.broadcast.imageWidth) × \(model.broadcast.imageHeight) · 采样 \(model.broadcast.sampledFrames) · 提交 \(model.broadcast.submitted)\n\(model.broadcast.message)" : model.senderState.message)
                     .font(.caption).foregroundColor(.secondary).frame(maxWidth: .infinity,alignment: .leading)
-                Button("保存设置",action: model.apply)
+                timingPanel
                 Text("共享组：\(SharedStore.groupID)").font(.caption2).foregroundColor(.secondary).frame(maxWidth: .infinity,alignment: .leading)
-                Text("提交不代表灯端回执。受保护画面可能取到黑色。").font(.caption2).foregroundColor(.secondary)
             }.padding(.top,14)
         }.font(.subheadline).padding(16).background(Color.white).cornerRadius(18)
+    }
+    private var timingPanel: some View {
+        VStack(alignment: .leading,spacing: 7) {
+            Text("App 内部耗时").font(.caption.weight(.semibold))
+            if let t = model.broadcast.timing {
+                Text(String(format: "取色均值  %.2f ms",t.averageSampleMS))
+                Text(String(format: "回调到提交  均值 %.2f / P95 %.2f ms",t.averageSubmitMS,t.p95SubmitMS))
+                Text("最近 \(t.count) 个颜色更新帧")
+            } else { Text("同步并变换画面后显示") }
+            Text("不含系统采集、无线传输和灯板发光时间")
+        }.font(.caption2).foregroundColor(.secondary).frame(maxWidth: .infinity,alignment: .leading)
     }
     private func testButton(_ text: String,_ rgb: RGB,_ tint: Color) -> some View {
         Button(text) { model.test(rgb) }.font(.subheadline).foregroundColor(tint).frame(maxWidth: .infinity).padding(.vertical,10).background(tint.opacity(0.08)).cornerRadius(9)
@@ -143,7 +162,6 @@ struct ContentView: View {
             VStack(spacing: 12) {
                 if let image = model.screenshot { ScreenshotPointView(image: image,u: $pointU,v: $pointV) }
                 Text(String(format: "X %.2f%%   Y %.2f%%",pointU*100,pointV*100)).font(.caption.monospaced())
-                Text("使用目标画面的完整截图，不要裁剪。位置相对当前屏幕保存。").font(.caption).foregroundColor(.secondary).padding(.horizontal)
             }.navigationTitle("选择取色位置").navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) { Button("取消") { showPoint = false; model.screenshot = nil } }
@@ -152,30 +170,6 @@ struct ContentView: View {
                         if model.save() { showPoint = false; model.screenshot = nil }
                     } }
                 }
-        }.navigationViewStyle(.stack)
-    }
-    private var startSheet: some View {
-        NavigationView {
-            VStack(spacing: 22) {
-                Image(systemName: "record.circle").font(.system(size: 42)).foregroundColor(accent)
-                Text("启动屏幕同步").font(.title2.bold())
-                if model.preparing {
-                    Text(model.senderState.message).font(.subheadline).multilineTextAlignment(.center)
-                    Text("先允许网络或蓝牙访问，再继续。").font(.caption).foregroundColor(.secondary)
-                    Button("准备完成，下一步") { model.releaseForBroadcastPicker() }
-                        .disabled(!model.senderState.ready)
-                } else {
-                    HStack {
-                        Text("点击右侧系统按钮 → 开始直播").font(.subheadline)
-                        SystemBroadcastButton().frame(width: 52,height: 52).background(accent).cornerRadius(12)
-                    }
-                    Text("“直播”是系统按钮名称。本 App 只在手机本地取色，不上传视频。开始后可切换到其他 App。").font(.caption).foregroundColor(.secondary).multilineTextAlignment(.center)
-                }
-                Text("当前固定位置：X \(model.xPercent)% / Y \(model.yPercent)%").font(.caption.monospaced())
-                Spacer(minLength: 0)
-            }.padding(24).padding(.top,24).navigationBarTitleDisplayMode(.inline)
-                .toolbar { ToolbarItem(placement: .confirmationAction) { Button("关闭") { showStart = false; model.endManual() } } }
-                .onChange(of: model.isBroadcasting) { active in if active { showStart = false } }
         }.navigationViewStyle(.stack)
     }
 }

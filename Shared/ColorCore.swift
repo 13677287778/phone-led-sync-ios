@@ -85,12 +85,73 @@ enum SampleGeometry {
 
 /// One overwriteable slot; acquisition never enqueues a closure per captured frame.
 final class LatestColorMailbox {
-    struct Entry { let frame: LEDFrame; let timestamp: TimeInterval }
+    struct Entry {
+        let frame: LEDFrame
+        let timestamp: TimeInterval
+        let capturedAt: TimeInterval?
+        let samplingMS: Double?
+    }
     private let lock = NSLock()
     private var entry: Entry?
-    func offer(_ frame: LEDFrame, now: TimeInterval = ProcessInfo.processInfo.systemUptime) {
-        lock.lock(); entry = Entry(frame: frame, timestamp: now); lock.unlock()
+    func offer(_ frame: LEDFrame, now: TimeInterval = ProcessInfo.processInfo.systemUptime,
+               capturedAt: TimeInterval? = nil, samplingMS: Double? = nil) {
+        lock.lock(); entry = Entry(frame: frame, timestamp: now, capturedAt: capturedAt, samplingMS: samplingMS); lock.unlock()
     }
     func read() -> Entry? { lock.lock(); defer { lock.unlock() }; return entry }
     func clear() { lock.lock(); entry = nil; lock.unlock() }
+}
+
+/// Keep the sampling phase instead of restarting a full interval after every
+/// callback. Small callback jitter must not accidentally halve a 60 Hz stream.
+struct FramePacer {
+    private var nextDue: Double?
+    private var previousFPS = 0
+    mutating func reset() { nextDue = nil; previousFPS = 0 }
+    mutating func accepts(at now: Double, fps: Int) -> Bool {
+        guard now.isFinite, [30,60,120].contains(fps) else { return false }
+        let interval = 1 / Double(fps)
+        if previousFPS != fps || nextDue == nil {
+            previousFPS = fps; nextDue = now + interval; return true
+        }
+        let due = nextDue!
+        guard now >= due - min(0.001, interval * 0.1) else { return false }
+        nextDue = now > due + interval ? now + interval : due + interval
+        return true
+    }
+}
+
+struct PipelineTiming: Codable {
+    var sampleMS: Double
+    var averageSampleMS: Double
+    var submitMS: Double
+    var averageSubmitMS: Double
+    var p95SubmitMS: Double
+    var count: Int
+}
+
+/// Bounded, O(1) updates; percentile is calculated only for the slow status UI.
+/// Measures capture-CALLBACK entry to SEND-API invocation, never LED latency.
+struct PipelineMeter {
+    private var samples: [(sample: Double, submit: Double)] = []
+    private var cursor = 0
+    private var sampleSum = 0.0
+    private var submitSum = 0.0
+    private var last = (sample: 0.0, submit: 0.0)
+    mutating func record(sampleMS: Double, submitMS: Double) {
+        guard sampleMS.isFinite, submitMS.isFinite, sampleMS >= 0, submitMS >= sampleMS else { return }
+        let value = (sample: sampleMS, submit: submitMS)
+        if samples.count < 120 { samples.append(value) }
+        else {
+            sampleSum -= samples[cursor].sample; submitSum -= samples[cursor].submit
+            samples[cursor] = value; cursor = (cursor + 1) % 120
+        }
+        sampleSum += sampleMS; submitSum += submitMS; last = value
+    }
+    var summary: PipelineTiming? {
+        guard !samples.isEmpty else { return nil }
+        let values = samples.map { $0.submit }.sorted()
+        return PipelineTiming(sampleMS: last.sample, averageSampleMS: sampleSum / Double(samples.count),
+            submitMS: last.submit, averageSubmitMS: submitSum / Double(samples.count),
+            p95SubmitMS: values[Int(ceil(Double(values.count) * 0.95))-1], count: samples.count)
+    }
 }

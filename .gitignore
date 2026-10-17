@@ -4,6 +4,7 @@ temp/
 work/
 output/
 build/
+release/
 __pycache__/
 .DS_Store
 xcuserdata/

@@ -12,6 +12,7 @@ struct SenderSnapshot {
     var message = "未连接"
     var submitted: UInt64 = 0
     var devices: [BLEChoice] = []
+    var timing: PipelineTiming?
 }
 
 /// This sender lives INSIDE the upload extension while broadcasting, not in the
@@ -24,6 +25,9 @@ final class ColorSender: NSObject, CBCentralManagerDelegate, CBPeripheralDelegat
     private let lock = NSLock()
     private var report = SenderSnapshot()
     private var timer: DispatchSourceTimer?
+    private var wakeup: DispatchSourceUserDataAdd?
+    private var meter = PipelineMeter()
+    private var lastMeasuredCapture: Double?
     private var settings = LEDSettings()
     private var key = ""
     private var generation = 0
@@ -43,16 +47,24 @@ final class ColorSender: NSObject, CBCentralManagerDelegate, CBPeripheralDelegat
     private var lastSentAt = 0.0
     private var keepStaticColor = false
     // Broadcaster stops refreshing a color when no screen frames arrive.
-    var snapshot: SenderSnapshot { lock.lock(); defer { lock.unlock() }; return report }
+    var snapshot: SenderSnapshot {
+        lock.lock(); defer { lock.unlock() }
+        var value = report; value.timing = meter.summary; return value
+    }
 
     override init() {
         super.init()
         let source = DispatchSource.makeTimerSource(queue: queue)
-        source.schedule(deadline: .now(), repeating: .milliseconds(8), leeway: .milliseconds(1))
+        // Changes wake this queue immediately. This timer is only a heartbeat
+        // and recovery fallback, not an extra 0–8 ms wait on every new color.
+        source.schedule(deadline: .now(), repeating: .milliseconds(250), leeway: .milliseconds(10))
         source.setEventHandler { [weak self] in self?.tick() }
         timer = source; source.resume()
+        let event = DispatchSource.makeUserDataAddSource(queue: queue)
+        event.setEventHandler { [weak self] in self?.tick() }
+        wakeup = event; event.resume()
     }
-    deinit { timer?.cancel(); udp?.cancel() }
+    deinit { wakeup?.cancel(); timer?.cancel(); udp?.cancel() }
 
     func configure(_ config: LEDSettings, scanOnly: Bool = false, keepStaticColor: Bool = false) {
         queue.async { [weak self] in
@@ -73,8 +85,9 @@ final class ColorSender: NSObject, CBCentralManagerDelegate, CBPeripheralDelegat
             }
         }
     }
-    func offer(_ rgb: RGB, brightness: Int) {
-        mailbox.offer(LEDFrame(rgb: rgb, brightness: UInt8(clamping: brightness)))
+    func offer(_ rgb: RGB, brightness: Int, capturedAt: Double? = nil, samplingMS: Double? = nil) {
+        mailbox.offer(LEDFrame(rgb: rgb, brightness: UInt8(clamping: brightness)), capturedAt: capturedAt, samplingMS: samplingMS)
+        wakeup?.add(data: 1)
     }
     func clear() { mailbox.clear() }
     func stop() {
@@ -98,6 +111,7 @@ final class ColorSender: NSObject, CBCentralManagerDelegate, CBPeripheralDelegat
     private func connected(_ message: String) {
         ready = true; session = UInt32.random(in: 1...UInt32.max); sequence = 0; lastSent = nil; lastSentAt = 0
         publish(message)
+        tick()
     }
     private func connectWiFi() {
         guard enabled, settings.mode == .wifi, let port = NWEndpoint.Port(rawValue: UInt16(settings.port)) else { return }
@@ -141,18 +155,27 @@ final class ColorSender: NSObject, CBCentralManagerDelegate, CBPeripheralDelegat
             guard let conn = udp else { return }
             inFlight = true
             let expected = generation
+            recordTimings(entry)
             conn.send(content: data, completion: .contentProcessed { [weak self] error in
                 guard let self = self, self.generation == expected else { return }
                 self.inFlight = false
-                if error == nil { self.didSubmit(entry.frame, sequence: next, at: now) }
+                if error == nil { self.didSubmit(entry.frame, sequence: next, at: now); self.tick() }
                 else { self.ready = false; self.publish("发送失败，正在重连"); self.retryWiFi() }
             })
         } else {
             guard let p = peripheral, let c = characteristic, p.state == .connected,
                   p.canSendWriteWithoutResponse, p.maximumWriteValueLength(for: .withoutResponse) >= data.count else { return }
+            recordTimings(entry)
             p.writeValue(data, for: c, type: .withoutResponse)
             didSubmit(entry.frame, sequence: next, at: now)
         }
+    }
+    private func recordTimings(_ entry: LatestColorMailbox.Entry) {
+        guard entry.frame != lastSent, let start = entry.capturedAt, let cost = entry.samplingMS,
+              start != lastMeasuredCapture else { return }
+        lastMeasuredCapture = start
+        let elapsed = (ProcessInfo.processInfo.systemUptime - start) * 1000
+        lock.lock(); meter.record(sampleMS: cost, submitMS: elapsed); lock.unlock()
     }
     private func didSubmit(_ frame: LEDFrame, sequence next: UInt32, at now: Double) {
         sequence = next; lastSent = frame; lastSentAt = now

@@ -54,4 +54,42 @@ slot.clear();check(slot.read() == nil,"stop clears pending color")
 let group = DispatchGroup()
 for i in 0..<4 { DispatchQueue.global().async(group: group) { for j in 0..<10000 { slot.offer(golden,now: Double(i*10000+j)); _ = slot.read() } } }
 group.wait();check(slot.read() != nil,"concurrent producer/read safety")
+var pacer = FramePacer()
+var accepted = 0
+var oldAccepted = 0
+var oldLast = -1.0
+for i in 0..<600 {
+    let jitter = i%3 == 0 ? 0.0 : i%3 == 1 ? 0.0008 : -0.0008
+    let now = Double(i)/60 + jitter
+    if pacer.accepts(at: now,fps: 60) { accepted += 1 }
+    if now-oldLast >= 1.0/60 { oldAccepted += 1; oldLast = now }
+}
+check(accepted == 600,"60 Hz jitter does not discard alternate callbacks")
+check(oldAccepted < accepted,"regression reproduces previous interval-gate drops")
+print("Jitter regression: previous gate \(oldAccepted)/600, phase pacer \(accepted)/600 (synthetic callbacks, not phone latency)")
+for (input,target) in [(60,30),(120,60),(60,120)] {
+    pacer.reset(); var n = 0
+    for i in 0..<input*10 { if pacer.accepts(at: Double(i)/Double(input),fps: target) { n += 1 } }
+    check(n == min(input,target)*10,"phase pacer rate \(input)->\(target)")
+}
+check(!pacer.accepts(at: .nan,fps: 60),"invalid pacer time")
+pacer.reset();check(pacer.accepts(at: 0,fps: 60),"first frame")
+check(!pacer.accepts(at: 0.001,fps: 60),"reject burst")
+check(pacer.accepts(at: 10,fps: 60),"skip missed schedule slots")
+check(!pacer.accepts(at: 10.001,fps: 60),"no catch-up FIFO")
+check(pacer.accepts(at: 10.002,fps: 120),"rate change resets phase")
+var meter = PipelineMeter()
+check(meter.summary == nil,"no fabricated zero latency before measurements")
+for i in 1...300 { meter.record(sampleMS: 0.1,submitMS: Double(i)) }
+let timing = meter.summary!
+check(timing.count == 120,"bounded timing window")
+check(abs(timing.averageSubmitMS-240.5)<0.00001,"recent-window mean")
+check(timing.p95SubmitMS == 294 && timing.submitMS == 300,"recent-window percentile/latest")
+meter.record(sampleMS: -1,submitMS: 0);meter.record(sampleMS: 2,submitMS: 1);meter.record(sampleMS: 0,submitMS: .nan)
+check(meter.summary?.submitMS == 300,"reject invalid measurement")
+slot.offer(golden,now: 10,capturedAt: 9.99,samplingMS: 0.25)
+check(slot.read()?.capturedAt == 9.99 && slot.read()?.samplingMS == 0.25,"timing travels with newest color")
+let encodedTiming = try JSONEncoder().encode(timing)
+let decodedTiming = try JSONDecoder().decode(PipelineTiming.self,from: encodedTiming)
+check(decodedTiming.count == 120,"timing status JSON")
 print("PASS \(checks) Swift core checks; screen-to-light latency not measured")

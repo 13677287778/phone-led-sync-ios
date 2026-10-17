@@ -11,6 +11,7 @@ struct BroadcastStatus: Codable {
     var submitted: UInt64 = 0
     var message = "待机"
     var lastVideoAt = 0.0
+    var timing: PipelineTiming?
     var isRunning: Bool { active && Date().timeIntervalSince1970 - updatedAt < 3 }
 }
 
@@ -18,10 +19,11 @@ struct StopRequest: Codable { var requestedAt: Double }
 
 enum SharedStore {
     static var groupID: String { Bundle.main.object(forInfoDictionaryKey: "ColorLightAppGroup") as? String ?? "" }
-    static var root: URL? {
+    private static let container: URL? = {
         guard !groupID.isEmpty, !groupID.contains("$(") else { return nil }
         return FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: groupID)
-    }
+    }()
+    static var root: URL? { container }
     static func read<T: Decodable>(_ name: String, as type: T.Type) -> T? {
         guard let url = root?.appendingPathComponent(name), let data = try? Data(contentsOf: url), data.count < 64*1024 else { return nil }
         return try? JSONDecoder().decode(type, from: data)
