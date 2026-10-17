@@ -11,7 +11,7 @@ enum PixelSampler {
         let (x,y) = SampleGeometry.pixel(u: settings.u, v: settings.v, width: width, height: height, orientation: orientation)
         let format = CVPixelBufferGetPixelFormatType(buffer)
         let radius = settings.area == 5 ? 2 : 0
-        let matrix = CVBufferGetAttachment(buffer, kCVImageBufferYCbCrMatrixKey, nil)?.takeUnretainedValue() as? String
+        let matrix = CVBufferCopyAttachment(buffer, kCVImageBufferYCbCrMatrixKey, nil) as? String
         let bt709 = matrix == (kCVImageBufferYCbCrMatrix_ITU_R_709_2 as String)
         var r = 0, g = 0, b = 0, count = 0
         for py in max(0,y-radius)...min(height-1,y+radius) {

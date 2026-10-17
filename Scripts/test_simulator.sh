@@ -17,3 +17,11 @@ xcodebuild -project ColorLight.xcodeproj -scheme ColorLight -configuration Debug
   -resultBundlePath output/PixelTests.xcresult CODE_SIGNING_ALLOWED=NO \
   test > output/xcode-simulator-tests.log 2>&1 || { tail -120 output/xcode-simulator-tests.log; exit 1; }
 echo 'Simulator CoreVideo pixel/channel/orientation/protocol tests passed; this is NOT ReplayKit real-device verification.'
+app=build/SimulatorData/Build/Products/Debug-iphonesimulator/ColorLight.app
+bundle=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Info.plist")
+xcrun simctl bootstatus "$device" -b
+xcrun simctl install "$device" "$app"
+xcrun simctl launch "$device" "$bundle"
+sleep 2
+xcrun simctl io "$device" screenshot output/dashboard-simulator.png
+echo 'Captured simulator dashboard for visual review; permissions and capture are not auto-approved.'

@@ -26,6 +26,16 @@ def main():
     report={'artifact':out.name,'sha256':sha,'compiled':True,'device_platform':'iPhoneOS','signed':False,'bundle_id':info['CFBundleIdentifier'],'extension_id':extension['CFBundleIdentifier'],'app_group':info['ColorLightAppGroup'],'deployment_target':info.get('MinimumOSVersion'),'iPhone_runtime_verified':False,'screen_capture_verified':False,'optical_latency_measured':False,'note':'Unsigned IPA needs valid signing/profiles for app and broadcast extension including App Groups. Runtime not inferred from compilation.'}
     (out.parent/'build-manifest.json').write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding='utf-8')
     (out.parent/'SHA256.txt').write_text(f'{sha}  {out.name}\n',encoding='utf-8')
+    entitlements={'com.apple.security.application-groups':[info['ColorLightAppGroup']]}
+    (out.parent/'app-group.entitlements.plist').write_bytes(plistlib.dumps(entitlements))
+    (out.parent/'签名说明.txt').write_text(
+        '这是未签名真机IPA，需要你自己的有效证书和匹配的描述文件。\n'
+        f"主App：{info['CFBundleIdentifier']}\n广播扩展：{extension['CFBundleIdentifier']}\n共享组：{info['ColorLightAppGroup']}\n"
+        '先签内嵌.appex，再签外层.app；两个目标使用同一团队及相同App Group，嵌入各自描述文件。\n'
+        'app-group.entitlements.plist只是本项目所需的共享组权限，不是完整签名权限模板，不能代替描述文件。\n'
+        '若最终包名或共享组要修改，请修改Config/Build.xcconfig并重新编译，不要只重命名外层包。\n'
+        '签名工具去掉共享组权限时，App可能能打开但无法取色同步。\n'
+        '编译和模拟器像素测试不等于iPhone屏幕广播、BLE或光学延迟已经实测。\n',encoding='utf-8')
     print(json.dumps(report,indent=2))
 
 if __name__=='__main__':main()

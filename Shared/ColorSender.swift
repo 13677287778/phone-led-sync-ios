@@ -36,6 +36,7 @@ final class ColorSender: NSObject, CBCentralManagerDelegate, CBPeripheralDelegat
     private var found: [String: BLEChoice] = [:]
     private var ready = false
     private var inFlight = false
+    private var retryScheduled = false
     private var session = UInt32.random(in: 1...UInt32.max)
     private var sequence: UInt32 = 0
     private var lastSent: LEDFrame?
@@ -84,7 +85,7 @@ final class ColorSender: NSObject, CBCentralManagerDelegate, CBPeripheralDelegat
         }
     }
     private func disconnect() {
-        ready = false; inFlight = false; characteristic = nil
+        ready = false; inFlight = false; retryScheduled = false; characteristic = nil
         udp?.stateUpdateHandler = nil; udp?.cancel(); udp = nil
         central?.stopScan()
         if let p = peripheral { p.delegate = nil; central?.cancelPeripheralConnection(p) }
@@ -120,9 +121,12 @@ final class ColorSender: NSObject, CBCentralManagerDelegate, CBPeripheralDelegat
         conn.start(queue: queue)
     }
     private func retryWiFi() {
+        guard !retryScheduled else { return }
+        retryScheduled = true
         let expected = generation
         queue.asyncAfter(deadline: .now()+1) { [weak self] in
             guard let self = self, self.enabled, self.generation == expected, self.settings.mode == .wifi else { return }
+            self.retryScheduled = false
             self.udp?.stateUpdateHandler = nil; self.udp?.cancel(); self.connectWiFi()
         }
     }

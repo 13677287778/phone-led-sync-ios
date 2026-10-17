@@ -60,8 +60,15 @@ final class SampleHandler: RPBroadcastSampleHandler {
         }
         let loaded = SharedStore.settings()
         if loaded.isValid {
-            stateLock.lock(); let changed = config != loaded; config = loaded; stateLock.unlock()
-            if changed { sender.configure(loaded, keepStaticColor: true); sender.clear() }
+            stateLock.lock(); let changed = config != loaded; config = loaded
+            let lastColor = status.rgb, hasFrame = status.sampledFrames > 0, paused = status.paused
+            stateLock.unlock()
+            if changed {
+                sender.clear(); sender.configure(loaded, keepStaticColor: true)
+                // Brightness/transport edits must also take effect on an idle,
+                // unchanged screen without waiting for ReplayKit to emit again.
+                if hasFrame && !paused { sender.offer(lastColor, brightness: loaded.brightness) }
+            }
         }
         let sent = sender.snapshot
         stateLock.lock()
